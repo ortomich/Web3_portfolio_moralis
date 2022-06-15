@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Vanilla Boilerplate</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/web3@latest/dist/web3.min.js"></script>
+    <script src="https://unpkg.com/moralis/dist/moralis.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body style="margin:0px">
+
+    <div class="header">
+        <button id="btn-login" class="buts">Login</button>
+        <button id="btn-user" class="buts" style="display: none;"></button>
+        <button id="btn-logout" class="buts" style="display: none;">Logout</button>
+    </div>
+
+    <div style="margin-top: 10px; display: flex; justify-content: space-around;">
+        <button id="myPortfolio" class="buts" style="display: none;">Show my portfolio</button>
+    </div>
+
+    <div style="margin-top: 10px; display: flex; justify-content: center;">
+        <div style="width:500px; height:500px">
+            <canvas id="myTokens"></canvas>
+        </div>
+        <div id="tableTokens">
+
+        </div>
+    </div>
+       
+
+    <script>
+        /** Connect to Moralis server */
+        const serverUrl = "https://xxxxx.yourserver.com:2053/server";
+        const appId = "YOUR_APP_ID";
+        Moralis.start({ serverUrl, appId });
+
+        /** Add from here down */
+        async function login() {
+            let user = Moralis.User.current();
+            if (!user) {
+                try {
+                    user = await Moralis.authenticate({ signingMessage: "Hello World!" })
+                    console.log(user)
+                } catch (error) {
+                    console.log(error)
+                }
+            }
+            document.getElementById("btn-user").style.display="inline";
+            document.getElementById("btn-logout").style.display="inline";
+            document.getElementById("myPortfolio").style.display="inline";
+            document.getElementById("btn-login").style.display="none";
+
+            let adr = user.get("ethAddress");
+            console.log(adr);
+            adr = adr.slice(0,6) + "..." + adr.slice(38);
+            document.getElementById("btn-user").innerHTML=adr;
+        }
+
+        async function logOut() {
+            await Moralis.User.logOut();
+            console.log("logged out");
+
+            document.getElementById("btn-user").style.display="none";
+            document.getElementById("btn-logout").style.display="none";
+            document.getElementById("myPortfolio").style.display="none";
+            document.getElementById("btn-login").style.display="inline";
+        }
+
+        function getNativeBalance() {
+            var _getNativeBalance = (0, _asyncToGenerator2.default)( /*#__PURE__*/_regenerator.default.mark(function _callee12() {
+            var options,
+                _args12 = arguments;
+            return _regenerator.default.wrap(function (_context13) {
+                while (1) {
+                switch (_context13.prev = _context13.next) {
+                    case 0:
+                    options = _args12.length > 0 && _args12[0] !== undefined ? _args12[0] : {};
+                    return _context13.abrupt("return", Web3Api.fetch({
+                        endpoint: {
+                        "method": "GET",
+                        "group": "account",
+                        "name": "getNativeBalance",
+                        "url": "/:address/balance"
+                        },
+                        params: options
+                    }));
+
+                    case 2:
+                    case "end":
+                    return _context13.stop();
+                }
+                }
+            }, _callee12);
+            }));
+
+            return function () {
+            return _getNativeBalance.apply(this, arguments);
+            };
+        }
+
+        // here we gets info about balance of account
+
+        async function showPortfolio() {
+            let balances = await Moralis.Web3API.account.getTokenBalances({chain: "mainnet"});
+            //console.log(balances);
+            let eth = await Moralis.Web3API.account.getNativeBalance({chain: "mainnet"});
+            //console.log(eth);
+
+            //realAdd = ["0xdAC17F958D2ee523a2206206994597C13D831ec7", "0x514910771AF9Ca656af840dff83E8264EcF986CA"];
+
+            let amounts = [];
+            let prices = [];
+            let name = [];
+            for (let i = 0; i < balances.length; i++) {
+                let amount = balances[i].balance / (10**(balances[i].decimals));
+                amounts.push(amount);
+                let price = (await Moralis.Web3API.token.getTokenPrice({address: balances[i].token_address})).usdPrice;
+                //let price = (await Moralis.Web3API.token.getTokenPrice({address: realAdd[i]})).usdPrice;
+                prices.push(price);
+                let token= balances[i].symbol;
+                name.push(token);
+            }
+
+            amounts.push(eth.balance / (10**18));
+            prices.push((await Moralis.Web3API.token.getTokenPrice({address: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2"})).usdPrice);
+            name.push("ETH");
+
+            let myAmounts = prices.map((e, index) => e * amounts[index]);
+            const reducer = (previousValue, currentValue) => previousValue + currentValue;
+            const total = myAmounts.reduce(reducer);
+            
+            // here we makes pie chart
+            const data = {
+                labels: name,
+                datasets: [{
+                    label: 'My portfolio',
+                    data: myAmounts,
+                    backgroundColor: [
+                        'rgb(255, 99, 132)',
+                        'rgb(54, 162, 235)',
+                        'rgb(255, 205, 86)'
+                    ],
+                    hoverOffset: 4
+                }]
+            };
+
+            const config = {
+                type: 'doughnut',
+                data: data,
+            };
+
+            const myChart = new Chart(
+                document.getElementById('myTokens'),
+                config
+            );
+
+            //making the table in the right
+            let table = `<table>`;
+            table += `<tr><th>Token</th><th>Percentage</th><th>Value</th></tr>`;
+            name.forEach((token, index) => {
+                table += `<tr><td>${name[index]}</td><td>${(myAmounts[index]/total * 100).toFixed(1)}%</td><td>$${(myAmounts[index]).toFixed(2)}</td></tr>`;
+            });
+            table += `</table>`;
+
+
+            document.getElementById("tableTokens").innerHTML = table;
+
+        }
+
+        document.getElementById("btn-login").onclick = login;
+        document.getElementById("btn-logout").onclick = logOut;
+        document.getElementById("myPortfolio").onclick = showPortfolio;
+    </script>
+</body>
+
+</html>
